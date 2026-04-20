@@ -21,7 +21,7 @@ class DatabaseService:
                 pass
         else:
             # Check if it already exists
-        try:
+            try:
                 self.client.get_index(self.index_name)
                 print(f"[*] Index '{self.index_name}' already exists. Skipping creation.")
                 return

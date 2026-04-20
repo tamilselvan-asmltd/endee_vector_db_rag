@@ -1,56 +1,14 @@
 version: '3.8'
 
-volumes:
-  endee_data:
-  ollama_data:
-
 services:
-  endee-server:
+  endee:
     image: endeeio/endee-server:latest
     container_name: endee-server
     ports:
       - "8080:8080"
+    restart: unless-stopped
     volumes:
       - endee_data:/app/data
-    environment:
-      - ENDEE_LOG_LEVEL=info
-    restart: unless-stopped
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-
-  rag-app:
-    build: .
-    container_name: rag-app
-    ports:
-      - "8501:8501"
-    depends_on:
-      - endee-server
-      - ollama
-    volumes:
-      - .:/app
-      - ./docs:/app/docs
-      - ${NLTK_DATA_PATH:-~/nltk_data}:/app/nltk_data
-    env_file: .env
-    environment:
-      - OLLAMA_URL=http://ollama:11434
-      - ENDEE_URL=http://endee-server:8080
-      - DOC_SERVER_URL=http://localhost:8003
-    restart: unless-stopped
-
-  pdf-server:
-    image: python:3.10-alpine
-    container_name: pdf-server
-    ports:
-      - "8003:8003"
-    volumes:
-      - ./docs:/docs
-    working_dir: /docs
-    command: python3 -m http.server 8003
-    restart: unless-stopped
+volumes:
+  endee_data:

@@ -34,6 +34,9 @@ class DatabaseService:
                 name=self.index_name,
                 dimension=self.dimension,
                 space_type=self.space_type,
+                M=settings.endee_m,
+                ef_con=settings.endee_ef_con,
+                precision=settings.endee_precision,
                 sparse_model="endee_bm25",
             )
             print(f"[+] Index '{self.index_name}' created successfully.")

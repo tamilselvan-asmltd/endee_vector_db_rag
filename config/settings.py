@@ -12,13 +12,17 @@ class Settings(BaseSettings):
     endee_index_name: str = "cnc_hybrid_vdb"
     dense_dim: int = 768
     space_type: str = "cosine"
+    endee_m: int = 32
+    endee_ef_con: int = 256
+    endee_precision: str = "float32"
+
 
     # Sparse
     sparse_model_path: str = "endee/bm25"
 
     # RAG
-    chunk_size: int = 1200
-    chunk_overlap: int = 200
+    chunk_size: int = 700
+    chunk_overlap: int = 120
     top_k: int = 5
     doc_server_url: str = "http://localhost:8003"
     nltk_data_path: str = str(Path.home() / "nltk_data")

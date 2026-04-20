@@ -8,11 +8,41 @@ from typing import List, Dict, Any
 # Ensure we can import from core/config
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# --- Configure NLTK for Auto-Download & Offline Use ---
+from config.settings import settings
+os.environ["NLTK_DATA"] = settings.nltk_data_path
+try:
+    import nltk
+    import os
+    
+    os.makedirs(settings.nltk_data_path, exist_ok=True)
+    
+    # Ensure offline paths are prioritized
+    if settings.nltk_data_path not in nltk.data.path:
+        nltk.data.path.insert(0, settings.nltk_data_path)
+        
+    # Auto-download missing mandatory packages to the local unified folder
+    required_pkgs = [
+        ('tokenizers/punkt', 'punkt'),
+        ('tokenizers/punkt_tab', 'punkt_tab'),
+        ('corpora/stopwords', 'stopwords')
+    ]
+    
+    for resource_path, pkg_name in required_pkgs:
+        try:
+            nltk.data.find(resource_path)
+        except LookupError:
+            print(f"[*] Downloading missing NLTK package: {pkg_name}...")
+            nltk.download(pkg_name, download_dir=settings.nltk_data_path, quiet=True)
+            
+except ImportError:
+    pass
+# ------------------------------------------------------------------------
+
 from core.embeddings import EmbeddingService
 from core.database import DatabaseService
 from core.retriever import HybridEndeeRetriever
 from core.generator import GenerationService
-from config.settings import settings
 from main import ingest
 
 # --- Page Configuration ---

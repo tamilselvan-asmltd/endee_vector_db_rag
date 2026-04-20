@@ -15,7 +15,7 @@ def calculate_retriever_speed():
     embeddings = EmbeddingService()
     db = DatabaseService()
     index = db.get_index()
-    
+    #
     # 2. Setup Retriever
     retriever = HybridEndeeRetriever(
         index=index,

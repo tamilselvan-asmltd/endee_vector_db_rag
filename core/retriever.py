@@ -1,4 +1,9 @@
+import os
 import time
+
+# Silence noisy transformers logs
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
 from typing import List, Any
 from pydantic import Field
 from langchain_core.retrievers import BaseRetriever

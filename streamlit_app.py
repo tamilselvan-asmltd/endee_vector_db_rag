@@ -8,6 +8,13 @@ from typing import List, Dict, Any
 # Ensure we can import from core/config
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# --- Silence Noisy Transformers Logs ---
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+import logging
+logging.getLogger("transformers").setLevel(logging.ERROR)
+# ---------------------------------------
+
 # --- Configure NLTK for Auto-Download & Offline Use ---
 from config.settings import settings
 os.environ["NLTK_DATA"] = settings.nltk_data_path

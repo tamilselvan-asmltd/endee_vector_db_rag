@@ -140,6 +140,9 @@ if "messages" not in st.session_state:
 if "system_initialized" not in st.session_state:
     st.session_state.system_initialized = False
 
+if "active_search_filter" not in st.session_state:
+    st.session_state.active_search_filter = []
+
 # --- Core RAG Logic ---
 def initialize_services():
     """Initializes RAG services and caches them in session state."""
@@ -147,7 +150,13 @@ def initialize_services():
         embeddings = EmbeddingService()
         db = DatabaseService()
         index = db.get_index()
-        retriever = HybridEndeeRetriever(index=index, embedding_service=embeddings)
+        
+        # Use active search filter from session state
+        retriever = HybridEndeeRetriever(
+            index=index, 
+            embedding_service=embeddings,
+            base_filter=st.session_state.active_search_filter
+        )
         generator = GenerationService(retriever)
         
         st.session_state.generator = generator
@@ -171,6 +180,39 @@ def save_uploaded_files(uploaded_files: List[Any]) -> List[str]:
 # --- Sidebar: Ingestion & Control ---
 with st.sidebar:
     st.title("Knowledge Library")
+    
+    st.subheader("🔍 Search Filters")
+    search_filter_input = st.text_input(
+        "Active Search Filter",
+        placeholder="e.g. dept=maint",
+        help="Apply filters to your questions. Format: key=value",
+        key="search_filter_input"
+    )
+    
+    if st.button("Apply Search Filter"):
+        if search_filter_input:
+            try:
+                new_filter = []
+                pairs = [p.strip() for p in search_filter_input.split(",")]
+                for pair in pairs:
+                    if "=" in pair:
+                        k, v = pair.split("=", 1)
+                        new_filter.append({k.strip(): {"$eq": v.strip()}})
+                
+                if new_filter:
+                    st.session_state.active_search_filter = new_filter
+                    st.success(f"Filters applied: {search_filter_input}")
+                    initialize_services()
+                else:
+                    st.error("Invalid format. Use key=value, key2=value2")
+            except Exception as e:
+                st.error(f"Filter error: {e}")
+        else:
+            st.session_state.active_search_filter = []
+            st.info("Filters cleared.")
+            initialize_services()
+
+    st.divider()
     st.write("Upload PDF manuals to expand the AI's engineering knowledge.")
     
     uploaded_files = st.file_uploader(
@@ -181,6 +223,12 @@ with st.sidebar:
     
     recreate_index = st.checkbox("Fresh Start (Wipe Index)", value=False)
     
+    metadata_input = st.text_input(
+        "Metadata Filters (Optional)",
+        placeholder="e.g. dept=maint, machine=cnc01",
+        help="Custom tags to apply to these documents. Format: key=value, key2=value2"
+    )
+    
     if st.button("🚀 Synchronize Data", use_container_width=True):
         if not uploaded_files:
             st.warning("Please select files before synchronizing.")
@@ -190,8 +238,21 @@ with st.sidebar:
                 for i, path in enumerate(saved_paths):
                     st.write(f"Processing ({i+1}/{len(saved_paths)}): {Path(path).name}")
                     run_recreate = recreate_index if i == 0 else False
+                    
+                    # Parse metadata filters
+                    extra_meta = {}
+                    if metadata_input:
+                        try:
+                            pairs = [p.strip() for p in metadata_input.split(",")]
+                            for pair in pairs:
+                                if "=" in pair:
+                                    k, v = pair.split("=", 1)
+                                    extra_meta[k.strip()] = v.strip()
+                        except Exception as e:
+                            st.error(f"Error parsing metadata filters: {e}")
+
                     try:
-                        ingest(path, recreate=run_recreate)
+                        ingest(path, recreate=run_recreate, extra_metadata=extra_meta)
                     except Exception as e:
                         st.error(f"Error processing {Path(path).name}: {e}")
                 
@@ -203,6 +264,35 @@ with st.sidebar:
     if st.button("🧹 Clear Chat History", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
+
+    st.divider()
+    with st.expander("🛠️ Index Management"):
+        st.write("Delete chunks based on metadata filters.")
+        del_filter_input = st.text_input(
+            "Delete Filter",
+            placeholder="key=value",
+            key="del_filter"
+        )
+        if st.button("🗑️ Delete Chunks", type="primary", use_container_width=True):
+            if not del_filter_input:
+                st.warning("Please provide a filter for deletion.")
+            else:
+                try:
+                    new_del_filter = []
+                    pairs = [p.strip() for p in del_filter_input.split(",")]
+                    for pair in pairs:
+                        if "=" in pair:
+                            k, v = pair.split("=", 1)
+                            new_del_filter.append({k.strip(): {"$eq": v.strip()}})
+                    
+                    if new_del_filter:
+                        from main import delete_by_filter
+                        delete_by_filter(new_del_filter)
+                        st.success(f"Deletion successful for: {del_filter_input}")
+                    else:
+                        st.error("Invalid filter format. Use key=value, key2=value2")
+                except Exception as e:
+                    st.error(f"Deletion failed: {e}")
 
 # --- Main UI ---
 st.title("CNC Support Intelligence")

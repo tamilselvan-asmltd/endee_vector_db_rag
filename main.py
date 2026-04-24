@@ -27,9 +27,11 @@ from core.database import DatabaseService
 from core.retriever import HybridEndeeRetriever
 from core.generator import GenerationService
 
-def ingest(pdf_path: str, recreate: bool = False):
+def ingest(pdf_path: str, recreate: bool = False, extra_metadata: Optional[Dict[str, Any]] = None):
     """Ingests a PDF into the vector database."""
     print(f"[*] Ingesting PDF: {pdf_path}")
+    if extra_metadata:
+        print(f"[*] Applying extra metadata: {extra_metadata}")
     
     loader = PDFLoader()
     splitter = TextSplitter(settings.chunk_size, settings.chunk_overlap)
@@ -65,9 +67,14 @@ def ingest(pdf_path: str, recreate: bool = False):
                 "vector": dvec,
                 "sparse_indices": sv.indices.tolist(),
                 "sparse_values": sv.values.tolist(),
+                "filter": {
+                    "filename": filename,
+                    **(extra_metadata or {})
+                },
                 "meta": {
                     "text": chunk,
                     **metadata,
+                    **(extra_metadata or {}),
                     "chunk_id": i
                 },
             })
@@ -125,6 +132,14 @@ def ask(query: str):
             print(f"    - {link}")
             
     print("-" * 30)
+
+def delete_by_filter(filt: List[dict]):
+    """Deletes chunks from the index based on a filter."""
+    print(f"[*] Initializing Database Service for deletion...")
+    from core.database import DatabaseService
+    db = DatabaseService()
+    index = db.get_index()
+    db.delete_by_filter(index, filt)
 
 def main():
     parser = argparse.ArgumentParser(description="Endee RAG System CLI")

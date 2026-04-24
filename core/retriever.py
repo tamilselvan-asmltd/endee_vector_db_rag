@@ -23,12 +23,13 @@ class HybridEndeeRetriever(BaseRetriever):
         q_sparse = self.embedding_service.get_sparse_embedding(query, is_query=True)
 
         # 2) Perform hybrid query
+        print(f"[*] Querying with filter: {self.base_filter}")
         hits = self.index.query(
             vector=q_dense,
             sparse_indices=q_sparse.indices.tolist(),
             sparse_values=q_sparse.values.tolist(),
             top_k=self.top_k,
-            # filter=self.base_filter if self.base_filter else None
+            filter=self.base_filter if self.base_filter else None
         )
         print(f"[*] Hybrid Search complete. Found {len(hits)} relevant chunks.")
 

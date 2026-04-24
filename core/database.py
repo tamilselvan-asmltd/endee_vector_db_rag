@@ -65,3 +65,17 @@ class DatabaseService:
             kwargs["filter"] = filt
         
         return index.query(**kwargs)
+
+    def delete_by_filter(self, index, filt: List[dict]):
+        """Deletes points from the index based on a filter."""
+        if not filt:
+            print("[!] No filter provided for deletion. Skipping.")
+            return
+        
+        print(f"[*] Deleting chunks with filter: {filt}")
+        try:
+            index.delete_with_filter(filter=filt)
+            print("[+] Deletion successful.")
+        except Exception as e:
+            print(f"[!] Error during deletion: {e}")
+            raise e

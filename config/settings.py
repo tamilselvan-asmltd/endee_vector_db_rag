@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     doc_server_url: str = "http://localhost:8003"
     nltk_data_path: str = str(Path.home() / "nltk_data")
 
+    # Reranker
+    use_reranker: bool = True
+    reranker_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_model_path: str = str(Path(__file__).parent.parent / "models" / "reranker")
+    rerank_top_k: int = 15
+
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent / ".env"),
         env_file_encoding="utf-8",

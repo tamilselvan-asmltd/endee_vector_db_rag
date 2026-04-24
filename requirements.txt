@@ -12,3 +12,4 @@ numpy
 streamlit
 endee_model
 endee
+sentence-transformers

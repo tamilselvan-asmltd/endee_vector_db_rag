@@ -9,6 +9,7 @@
 env/
 venv/
 ENV/
+models/
 nltk_data/
 # Python
 __pycache__/

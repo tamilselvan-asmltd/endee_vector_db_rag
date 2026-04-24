@@ -23,6 +23,8 @@ class HybridEndeeRetriever(BaseRetriever):
     top_k: int = Field(default=settings.top_k)
     base_filter: List[dict] = Field(default_factory=list)
     last_retrieval_time: float = Field(default=0.0)
+    last_hybrid_time: float = Field(default=0.0)
+    last_rerank_time: float = Field(default=0.0)
     reranker: Any = Field(default=None, exclude=True)
 
     def __init__(self, **data: Any):
@@ -103,6 +105,7 @@ class HybridEndeeRetriever(BaseRetriever):
             )
         
         # 4) Rerank if enabled and model is loaded
+        rerank_start = time.perf_counter()
         if settings.use_reranker and self.reranker and docs:
             print(f"[*] Reranking {len(docs)} documents using {settings.reranker_model_name}...")
             pairs = [[query, d.page_content] for d in docs]
@@ -117,6 +120,8 @@ class HybridEndeeRetriever(BaseRetriever):
             # Filter to final top_k
             docs = docs[:self.top_k]
             print(f"[*] Reranking complete. Returning top {len(docs)} results.")
-
+        
+        self.last_rerank_time = time.perf_counter() - rerank_start
         self.last_retrieval_time = time.perf_counter() - start_time
+        self.last_hybrid_time = self.last_retrieval_time - self.last_rerank_time
         return docs

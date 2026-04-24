@@ -372,7 +372,16 @@ if prompt := st.chat_input("Ask about setups, maintenance, or operations..."):
                 
                 duration = end_gen - start_gen if stream_started else 0
                 tps = len(full_response.split()) / duration if duration > 0 else 0
-                st.caption(f"🚀 Speed: {tps:.2f} tokens/s | Latency: {duration:.2f}s | Retrieval: {retrieval_time:.2f}s")
+                
+                # Fetch detailed retrieval metrics
+                hybrid_time = getattr(generator.retriever, "last_hybrid_time", 0.0)
+                rerank_time = getattr(generator.retriever, "last_rerank_time", 0.0)
+                
+                st.caption(
+                    f"🚀 Speed: {tps:.2f} tokens/s | Latency: {duration:.2f}s | "
+                    f"Retrieval (Total): {retrieval_time:.2f}s "
+                    f"(Hybrid: {hybrid_time:.2f}s, Rerank: {rerank_time:.2f}s)"
+                )
 
                 # 4. Source Citations
                 unique_sources = []

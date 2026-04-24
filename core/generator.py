@@ -12,6 +12,7 @@ class GenerationService:
         self.llm = OllamaLLM(
             base_url=settings.ollama_url,
             model=settings.ollama_llm_model,
+            temperature=settings.llm_temperature,
             keep_alive="5m",
             streaming=True
         )

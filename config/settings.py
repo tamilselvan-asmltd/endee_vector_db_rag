@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     ollama_embed_model: str = "nomic-embed-text:latest"
     ollama_llm_model: str = "gemma4:31b-cloud"
+    llm_temperature: float = 0.0
 
     # Endee
     endee_url: str = "http://localhost:8080"

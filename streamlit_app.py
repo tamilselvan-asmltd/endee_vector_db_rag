@@ -4,6 +4,7 @@ import sys
 import time
 from pathlib import Path
 from typing import List, Dict, Any
+from langchain_core.messages import HumanMessage, AIMessage
 
 # Ensure we can import from core/config
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -335,10 +336,30 @@ if prompt := st.chat_input("Ask about setups, maintenance, or operations..."):
             generator = st.session_state.generator
             
             try:
+                # 0. Prepare History for LangChain
+                chat_history = []
+                # Convert session messages to LangChain format (excluding current prompt)
+                # Limit to the last N messages based on settings (multiplied by 2 for turns)
+                window_size = settings.history_window_size * 2
+                for m in st.session_state.messages[-window_size:-1]:
+                    if m["role"] == "user":
+                        chat_history.append(HumanMessage(content=m["content"]))
+                    elif m["role"] == "assistant":
+                        chat_history.append(AIMessage(content=m["content"]))
+
                 # 1. Retrieval Phase
                 with st.spinner("Analyzing manuals..."):
-                    context_docs = generator.retriever.invoke(prompt)
-                    retrieval_time = getattr(generator.retriever, "last_retrieval_time", 0.0)
+                    if chat_history:
+                        # Use history-aware retriever
+                        context_docs = generator.history_aware_retriever.invoke({
+                            "input": prompt,
+                            "chat_history": chat_history
+                        })
+                    else:
+                        # Fallback to direct retrieval
+                        context_docs = generator.base_retriever.invoke(prompt)
+                    
+                    retrieval_time = getattr(generator.base_retriever, "last_retrieval_time", 0.0)
                 
                 if context_docs:
                     st.toast(f"🔍 Found {len(context_docs)} relevant context points in {retrieval_time:.2f}s")
@@ -374,8 +395,8 @@ if prompt := st.chat_input("Ask about setups, maintenance, or operations..."):
                 tps = len(full_response.split()) / duration if duration > 0 else 0
                 
                 # Fetch detailed retrieval metrics
-                hybrid_time = getattr(generator.retriever, "last_hybrid_time", 0.0)
-                rerank_time = getattr(generator.retriever, "last_rerank_time", 0.0)
+                hybrid_time = getattr(generator.base_retriever, "last_hybrid_time", 0.0)
+                rerank_time = getattr(generator.base_retriever, "last_rerank_time", 0.0)
                 
                 st.caption(
                     f"🚀 Speed: {tps:.2f} tokens/s | Latency: {duration:.2f}s | "

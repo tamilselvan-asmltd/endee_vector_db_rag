@@ -1,8 +1,9 @@
 import sys
 import time
 from typing import List, Dict, Any
-from langchain_ollama import OllamaLLM
-from langchain_core.prompts import PromptTemplate
+from langchain_ollama import OllamaLLM, ChatOllama
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
+from langchain_classic.chains import create_history_aware_retriever
 from config.settings import settings
 
 class GenerationService:
@@ -16,7 +17,38 @@ class GenerationService:
             keep_alive="5m",
             streaming=True
         )
-        self.retriever = retriever
+        
+        # We use ChatOllama for the query rewriting part as it handles message history better
+        self.chat_llm = ChatOllama(
+            base_url=settings.ollama_url,
+            model=settings.ollama_llm_model,
+            temperature=0, # Lower temperature for query rewriting
+            keep_alive="5m"
+        )
+        
+        self.base_retriever = retriever
+        
+        # 1. Setup History-Aware Retriever
+        contextualize_q_system_prompt = (
+            "Given a chat history and the latest user question "
+            "which might reference context in the chat history, "
+            "formulate a standalone question which can be understood "
+            "without the chat history. Do NOT answer the question, "
+            "just reformulate it if needed and otherwise return it as is."
+        )
+        contextualize_q_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", contextualize_q_system_prompt),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ]
+        )
+        
+        # This chain takes 'input' and 'chat_history' and returns a list of Documents
+        self.history_aware_retriever = create_history_aware_retriever(
+            self.chat_llm, self.base_retriever, contextualize_q_prompt
+        )
+
         self.prompt_template = PromptTemplate.from_template("""
 Use the following context to answer the user's question. 
 If you don't know the answer based on the context, just say you don't know. 
@@ -34,13 +66,23 @@ Answer:
         """Formats a list of documents into a single context string."""
         return "\n\n".join([f"--- Source: {d.metadata.get('filename', 'Unknown')} ---\n{d.page_content}" for d in docs])
 
-    def run_with_metrics(self, query: str):
+    def run_with_metrics(self, query: str, chat_history: List[Any] = None):
         """Runs the manual RAG pipeline and returns result with performance metrics."""
         
         # 1. Retrieval Phase
         print("[*] Retrieving relevant context...")
-        docs = self.retriever.invoke(query)
-        retrieval_time = getattr(self.retriever, "last_retrieval_time", 0.0)
+        
+        if chat_history:
+            print(f"[*] Using history-aware retrieval for: {query}")
+            # The history_aware_retriever returns Documents
+            docs = self.history_aware_retriever.invoke({
+                "input": query,
+                "chat_history": chat_history
+            })
+        else:
+            docs = self.base_retriever.invoke(query)
+            
+        retrieval_time = getattr(self.base_retriever, "last_retrieval_time", 0.0)
         
         context_text = self._format_context(docs)
         

@@ -3,9 +3,9 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     # Ollama
-    ollama_url: str = "http://localhost:11434"
+    ollama_url: str = "http://192.168.1.18:11434"
     ollama_embed_model: str = "nomic-embed-text:latest"
-    ollama_llm_model: str = "gemma4:31b-cloud"
+    ollama_llm_model: str = "gemma3:4b"
     llm_temperature: float = 0.0
 
     # Endee
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     top_k: int = 5
     doc_server_url: str = "http://localhost:8003"
     nltk_data_path: str = str(Path.home() / "nltk_data")
+    history_window_size: int = 5
 
     # Reranker
     use_reranker: bool = True

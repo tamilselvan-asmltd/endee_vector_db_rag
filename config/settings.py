@@ -3,9 +3,9 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     # Ollama
-    ollama_url: str = "http://192.168.1.18:11434"
+    ollama_url: str = "http://localhost:11434"
     ollama_embed_model: str = "nomic-embed-text:latest"
-    ollama_llm_model: str = "gemma3:4b"
+    ollama_llm_model: str = "gpt-oss:120b-cloud"
     llm_temperature: float = 0.0
 
     # Endee
@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     reranker_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_model_path: str = str(Path(__file__).parent.parent / "models" / "reranker")
     rerank_top_k: int = 15
+
+    # Redis Semantic Cache
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_password: str = ""
+    semantic_cache_threshold: float = 0.85
+    semantic_cache_ttl: int = 3600  # 1 hour
+    semantic_cache_index_name: str = "semantic_cache_idx"
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent / ".env"),

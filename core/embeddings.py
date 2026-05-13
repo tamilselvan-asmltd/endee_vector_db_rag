@@ -2,6 +2,7 @@ import requests
 import os
 from typing import List
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from endee_model import SparseModel
 from config.settings import settings
 
@@ -21,6 +22,7 @@ class EmbeddingService:
         self.sparse_model = EmbeddingService._sparse_model
         self.dense_dim = settings.dense_dim
 
+    @lru_cache(maxsize=128)
     def get_dense_embedding(self, text: str) -> List[float]:
         """Fetches dense embedding from Ollama."""
         print(f"[*] Generating dense embedding for: {text[:50]}...")

@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from langchain_ollama import OllamaLLM, ChatOllama
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.chains import create_history_aware_retriever
+from core.semantic_cache import RedisSemanticCache
 from config.settings import settings
 
 class GenerationService:
@@ -27,6 +28,7 @@ class GenerationService:
         )
         
         self.base_retriever = retriever
+        self.semantic_cache = RedisSemanticCache()
         
         # 1. Setup History-Aware Retriever
         contextualize_q_system_prompt = (
@@ -66,10 +68,38 @@ Answer:
         """Formats a list of documents into a single context string."""
         return "\n\n".join([f"--- Source: {d.metadata.get('filename', 'Unknown')} ---\n{d.page_content}" for d in docs])
 
-    def run_with_metrics(self, query: str, chat_history: List[Any] = None):
+    def run_with_metrics(self, query: str, chat_history: List[Any] = None, tenant_id: str = "default", doc_version: str = "1.0"):
         """Runs the manual RAG pipeline and returns result with performance metrics."""
         
-        # 1. Retrieval Phase
+        # 0. Query Normalization & Embedding Generation
+        normalized_query = self.semantic_cache.normalize_query(query)
+        q_dense = self.base_retriever.embedding_service.get_dense_embedding(normalized_query)
+
+        # 1. Semantic Cache Lookup
+        print("[*] Checking semantic cache...")
+        cached_hit = self.semantic_cache.search(
+            query_embedding=q_dense,
+            tenant_id=tenant_id,
+            doc_version=doc_version
+        )
+
+        if cached_hit and cached_hit.get("hit"):
+            print("[+] Returning cached response.")
+            return {
+                "result": cached_hit["response"],
+                "source_documents": [],
+                "cache_hit": True,
+                "similarity": cached_hit["similarity"]
+            }, {
+                "total_time": cached_hit["search_time"],
+                "retrieval_time": 0.0,
+                "llm_time": 0.0,
+                "tps": 0.0,
+                "token_count": len(cached_hit["response"].split()),
+                "cache_hit": True
+            }
+
+        # 2. Retrieval Phase
         print("[*] Retrieving relevant context...")
         
         if chat_history:
@@ -86,13 +116,13 @@ Answer:
         
         context_text = self._format_context(docs)
         
-        # 2. Prompt Preparation
+        # 3. Prompt Preparation
         final_prompt = self.prompt_template.format(
             context=context_text,
             question=query
         )
         
-        # 3. Generation Phase with Streaming
+        # 4. Generation Phase with Streaming
         print(f"\n[*] Generating LLM response...")
         print("-" * 30 + "\nANSWER:")
         
@@ -116,7 +146,7 @@ Answer:
         
         print("\n" + "-" * 30)
         
-        # 4. Metrics Calculation
+        # 5. Metrics Calculation
         total_duration = op_end_time - op_start_time
         llm_duration = (llm_end_time - llm_start_time) if llm_start_time else total_duration
         
@@ -124,12 +154,22 @@ Answer:
         token_count = len(tokens)
         tps = token_count / llm_duration if llm_duration > 0 else 0
         
+        # 6. Store in Semantic Cache
+        self.semantic_cache.store(
+            query=normalized_query,
+            embedding=q_dense,
+            response=full_response,
+            tenant_id=tenant_id,
+            doc_version=doc_version
+        )
+
         metrics = {
             "total_time": total_duration + retrieval_time,
             "retrieval_time": retrieval_time,
             "llm_time": llm_duration,
             "tps": tps,
-            "token_count": token_count
+            "token_count": token_count,
+            "cache_hit": False
         }
         
-        return {"result": full_response, "source_documents": docs}, metrics
+        return {"result": full_response, "source_documents": docs, "cache_hit": False}, metrics

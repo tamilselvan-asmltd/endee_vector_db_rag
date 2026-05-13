@@ -220,6 +220,10 @@ with st.sidebar:
             st.info("Filters cleared.")
             initialize_services()
 
+    st.subheader("🚀 Semantic Cache Settings")
+    st.session_state.tenant_id = st.text_input("Tenant ID", value="default", help="Isolation for semantic cache")
+    st.session_state.doc_version = st.text_input("Doc Version", value="1.0", help="Version for semantic cache")
+
     st.divider()
     st.write("Upload PDF manuals to expand the AI's engineering knowledge.")
     
@@ -347,87 +351,126 @@ if prompt := st.chat_input("Ask about setups, maintenance, or operations..."):
                     elif m["role"] == "assistant":
                         chat_history.append(AIMessage(content=m["content"]))
 
-                # 1. Retrieval Phase
-                with st.spinner("Analyzing manuals..."):
-                    if chat_history:
-                        # Use history-aware retriever
-                        context_docs = generator.history_aware_retriever.invoke({
-                            "input": prompt,
-                            "chat_history": chat_history
-                        })
-                    else:
-                        # Fallback to direct retrieval
-                        context_docs = generator.base_retriever.invoke(prompt)
+                # 0. Semantic Cache Check
+                with st.spinner("Checking semantic cache..."):
+                    normalized_query = generator.semantic_cache.normalize_query(prompt)
+                    q_dense = generator.base_retriever.embedding_service.get_dense_embedding(normalized_query)
                     
-                    retrieval_time = getattr(generator.base_retriever, "last_retrieval_time", 0.0)
-                
-                if context_docs:
-                    st.toast(f"🔍 Found {len(context_docs)} relevant context points in {retrieval_time:.2f}s")
-                    context_text = generator._format_context(context_docs)
-                else:
-                    st.warning("⚠️ No direct documents matched your query. Answering based on general knowledge.")
-                    context_text = "No direct document matches found."
+                    cached_hit = generator.semantic_cache.search(
+                        query_embedding=q_dense,
+                        tenant_id=st.session_state.get("tenant_id", "default"),
+                        doc_version=st.session_state.get("doc_version", "1.0")
+                    )
 
-                # 2. Generation Phase
-                final_prompt = generator.prompt_template.format(
-                    context=context_text,
-                    question=prompt
-                )
-                
-                start_gen = time.perf_counter()
-                stream_started = False
-                
-                for chunk in generator.llm.stream(final_prompt):
-                    if not stream_started: stream_started = True
-                    full_response += chunk
-                    message_placeholder.markdown(full_response + "▌")
-                
-                end_gen = time.perf_counter()
-                message_placeholder.markdown(full_response)
-                
-                # 3. Guard & Response Metrics
-                if not full_response.strip():
-                    st.error("The AI engine failed to provide a response. Check service logs.")
-                    full_response = "I couldn't generate a response. Please verify the AI connection."
+                if cached_hit and cached_hit.get("hit"):
+                    st.success(f"🎯 Semantic Cache Hit! (Similarity: {cached_hit['similarity']:.4f})")
+                    full_response = cached_hit["response"]
                     message_placeholder.markdown(full_response)
-                
-                duration = end_gen - start_gen if stream_started else 0
-                tps = len(full_response.split()) / duration if duration > 0 else 0
-                
-                # Fetch detailed retrieval metrics
-                hybrid_time = getattr(generator.base_retriever, "last_hybrid_time", 0.0)
-                rerank_time = getattr(generator.base_retriever, "last_rerank_time", 0.0)
-                
-                st.caption(
-                    f"🚀 Speed: {tps:.2f} tokens/s | Latency: {duration:.2f}s | "
-                    f"Retrieval (Total): {retrieval_time:.2f}s "
-                    f"(Hybrid: {hybrid_time:.2f}s, Rerank: {rerank_time:.2f}s)"
-                )
+                    
+                    st.caption(
+                        f"🚀 Speed: FAST (Cached) | Latency: {cached_hit['search_time']:.4f}s | "
+                        f"Tenant: {st.session_state.get('tenant_id', 'default')} | Version: {st.session_state.get('doc_version', '1.0')}"
+                    )
+                    
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": full_response,
+                        "sources": []
+                    })
+                else:
+                    if cached_hit and cached_hit.get("similarity", 0) > 0:
+                        st.info(f"ℹ️ Cache Miss (Best match similarity: {cached_hit['similarity']:.4f}, Threshold: {settings.semantic_cache_threshold})")
+                    
+                    # 1. Retrieval Phase
+                    with st.spinner("Analyzing manuals..."):
+                        if chat_history:
+                            # Use history-aware retriever
+                            context_docs = generator.history_aware_retriever.invoke({
+                                "input": prompt,
+                                "chat_history": chat_history
+                            })
+                        else:
+                            # Fallback to direct retrieval
+                            context_docs = generator.base_retriever.invoke(prompt)
+                        
+                        retrieval_time = getattr(generator.base_retriever, "last_retrieval_time", 0.0)
+                    
+                    if context_docs:
+                        st.toast(f"🔍 Found {len(context_docs)} relevant context points in {retrieval_time:.2f}s")
+                        context_text = generator._format_context(context_docs)
+                    else:
+                        st.warning("⚠️ No direct documents matched your query. Answering based on general knowledge.")
+                        context_text = "No direct document matches found."
 
-                # 4. Source Citations
-                unique_sources = []
-                seen_links = set()
-                for d in context_docs:
-                    link = d.metadata.get("link")
-                    if link and link not in seen_links:
-                        unique_sources.append({
-                            "filename": Path(d.metadata.get("filename", "Unknown")).name,
-                            "link": link,
-                            "page": d.metadata.get("page", "?")
-                        })
-                        seen_links.add(link)
-                
-                if unique_sources:
-                    with st.expander("📌 Source References"):
-                        for source in unique_sources:
-                            st.markdown(f"- **[{source['filename']}]({source['link']})** • Page {source['page']}")
-                
-                # 5. history Update
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": full_response,
-                    "sources": unique_sources
-                })
+                    # 2. Generation Phase
+                    final_prompt = generator.prompt_template.format(
+                        context=context_text,
+                        question=prompt
+                    )
+                    
+                    start_gen = time.perf_counter()
+                    stream_started = False
+                    
+                    for chunk in generator.llm.stream(final_prompt):
+                        if not stream_started: stream_started = True
+                        full_response += chunk
+                        message_placeholder.markdown(full_response + "▌")
+                    
+                    end_gen = time.perf_counter()
+                    message_placeholder.markdown(full_response)
+                    
+                    # 3. Guard & Response Metrics
+                    if not full_response.strip():
+                        st.error("The AI engine failed to provide a response. Check service logs.")
+                        full_response = "I couldn't generate a response. Please verify the AI connection."
+                        message_placeholder.markdown(full_response)
+                    
+                    duration = end_gen - start_gen if stream_started else 0
+                    tps = len(full_response.split()) / duration if duration > 0 else 0
+                    
+                    # Fetch detailed retrieval metrics
+                    hybrid_time = getattr(generator.base_retriever, "last_hybrid_time", 0.0)
+                    rerank_time = getattr(generator.base_retriever, "last_rerank_time", 0.0)
+                    
+                    st.caption(
+                        f"🚀 Speed: {tps:.2f} tokens/s | Latency: {duration:.2f}s | "
+                        f"Retrieval (Total): {retrieval_time:.2f}s "
+                        f"(Hybrid: {hybrid_time:.2f}s, Rerank: {rerank_time:.2f}s)"
+                    )
+
+                    # 4. Source Citations
+                    unique_sources = []
+                    seen_links = set()
+                    for d in context_docs:
+                        link = d.metadata.get("link")
+                        if link and link not in seen_links:
+                            unique_sources.append({
+                                "filename": Path(d.metadata.get("filename", "Unknown")).name,
+                                "link": link,
+                                "page": d.metadata.get("page", "?")
+                            })
+                            seen_links.add(link)
+                    
+                    if unique_sources:
+                        with st.expander("📌 Source References"):
+                            for source in unique_sources:
+                                st.markdown(f"- **[{source['filename']}]({source['link']})** • Page {source['page']}")
+                    
+                    # 5. Store in Semantic Cache (Done inside generator.run_with_metrics usually, but here we do manual loop)
+                    generator.semantic_cache.store(
+                        query=normalized_query,
+                        embedding=q_dense,
+                        response=full_response,
+                        tenant_id=st.session_state.get("tenant_id", "default"),
+                        doc_version=st.session_state.get("doc_version", "1.0")
+                    )
+
+                    # 6. history Update
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": full_response,
+                        "sources": unique_sources
+                    })
 
             except Exception as e:
                 st.error(f"System Error: {e}")

@@ -370,6 +370,9 @@ with st.sidebar:
     # Check for session change and sync
     if st.session_state.get("session_id") != new_session_id:
         st.session_state.session_id = new_session_id
+        # Clear suggestions from previous session to prevent overlap
+        st.session_state.suggestions = []
+        st.session_state.suggested_docs = None
         if sync_history_from_redis():
             st.rerun()
     
@@ -489,6 +492,13 @@ with st.sidebar:
 if page == "🤖 AI Chat":
     st.title("RAG - Chat")
     st.write("Expert guidance based on your engineering and maintenance documentation.")
+    
+    # Initialize Suggestions state
+    if "suggestions" not in st.session_state:
+        st.session_state.suggestions = []
+    
+    if "suggestions" not in st.session_state:
+        st.session_state.suggestions = []
     
     # Initialize services
     if not st.session_state.system_initialized:
@@ -624,9 +634,31 @@ if page == "🤖 AI Chat":
                 with st.expander("📌 Source References"):
                     for source in message["sources"]:
                         st.markdown(f"**[{source['filename']}]({source['link']})** • Page {source['page']}")
+    
+    # Display Suggestions
+    if st.session_state.suggestions:
+        cols = st.columns(len(st.session_state.suggestions))
+        for i, suggestion_data in enumerate(st.session_state.suggestions):
+            q_text = suggestion_data["question"]
+            if cols[i].button(f"💡 {q_text}", key=f"suggest_{i}", use_container_width=True):
+                st.session_state.suggested_query = q_text
+                st.session_state.suggested_docs = suggestion_data["pre_docs"]
+                st.rerun()
 
     # Chat Input & AI Workflow
-    if prompt := st.chat_input("Ask about setups, maintenance, or operations..."):
+    # Handle Suggested Query Click
+    suggested_query = st.session_state.get("suggested_query")
+    suggested_docs = st.session_state.get("suggested_docs")
+    
+    if suggested_query:
+        prompt = suggested_query
+        # suggested_docs is already in memory
+        st.session_state.suggested_query = None 
+    else:
+        prompt = st.chat_input("Ask about setups, maintenance, or operations...")
+        suggested_docs = None
+
+    if prompt:
         # User Perspective
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -675,23 +707,39 @@ if page == "🤖 AI Chat":
                             "content": full_response,
                             "sources": []
                         })
+                        
+                        # Generate Follow-up Suggestions (Cached Hit)
+                        with st.spinner("Preparing suggestions..."):
+                            st.session_state.suggestions = generator.generate_suggestions(
+                                chat_history=chat_history,
+                                context_docs=[], # No new docs for cache hit
+                                last_answer=full_response
+                            )
+                        st.rerun()
                     else:
                         if cached_hit and cached_hit.get("similarity", 0) > 0:
                             st.info(f"ℹ️ Cache Miss (Best match similarity: {cached_hit['similarity']:.4f}, Threshold: {settings.semantic_cache_threshold})")
                         
                         # 1. Retrieval Phase
-                        with st.spinner("Analyzing manuals..."):
-                            if chat_history:
-                                # Use history-aware retriever
-                                context_docs = generator.history_aware_retriever.invoke({
-                                    "input": prompt,
-                                    "chat_history": chat_history
-                                })
-                            else:
-                                # Fallback to direct retrieval
-                                context_docs = generator.base_retriever.invoke(prompt)
-                            
-                            retrieval_time = getattr(generator.base_retriever, "last_retrieval_time", 0.0)
+                        if suggested_docs:
+                            st.info("⚡ Using pre-retrieved context for faster response.")
+                            context_docs = suggested_docs
+                            retrieval_time = 0.01 # Negligible
+                            # Clear for next turn
+                            st.session_state.suggested_docs = None
+                        else:
+                            with st.spinner("Analyzing manuals..."):
+                                if chat_history:
+                                    # Use history-aware retriever
+                                    context_docs = generator.history_aware_retriever.invoke({
+                                        "input": prompt,
+                                        "chat_history": chat_history
+                                    })
+                                else:
+                                    # Fallback to direct retrieval
+                                    context_docs = generator.base_retriever.invoke(prompt)
+                                
+                                retrieval_time = getattr(generator.base_retriever, "last_retrieval_time", 0.0)
                         
                         if context_docs:
                             st.toast(f"🔍 Found {len(context_docs)} relevant context points in {retrieval_time:.2f}s")
@@ -775,6 +823,17 @@ if page == "🤖 AI Chat":
                             "content": full_response,
                             "sources": unique_sources
                         })
+
+                        # 8. Generate Follow-up Suggestions (Standard Path)
+                        with st.spinner("Preparing follow-up questions..."):
+                            st.session_state.suggestions = generator.generate_suggestions(
+                                chat_history=chat_history,
+                                context_docs=context_docs,
+                                last_answer=full_response
+                            )
+                        st.rerun()
+
+                        st.rerun()
 
                 except Exception as e:
                     st.error(f"System Error: {e}")

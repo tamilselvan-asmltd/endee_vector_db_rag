@@ -70,6 +70,28 @@ Do not try to make up an answer.
 ### Answer:
 """)
 
+        self.suggestion_prompt = PromptTemplate.from_template("""
+Based on the provided engineering manual snippets and the current conversation, generate 3 strategic follow-up questions.
+The questions should help the user dive deeper into the technical details found in the context or explore related maintenance procedures mentioned.
+
+### Context (Retrieved Chunks):
+{context}
+
+### Conversation History:
+{chat_history}
+
+### AI's Last Response:
+{last_answer}
+
+Provide exactly 3 questions that are answerable using the available technical documentation.
+Format:
+- Question 1
+- Question 2
+- Question 3
+
+No other text.
+""")
+
     def _format_context(self, docs: List[Any]) -> str:
         """Formats a list of documents into a single context string."""
         return "\n\n".join([f"--- Source: {d.metadata.get('filename', 'Unknown')} ---\n{d.page_content}" for d in docs])
@@ -205,3 +227,42 @@ Do not try to make up an answer.
         }
         
         return {"result": full_response, "source_documents": docs, "cache_hit": False}, metrics
+
+    def generate_suggestions(self, chat_history: List[Any], context_docs: List[Any], last_answer: str) -> List[Dict[str, Any]]:
+        """Generates 3 follow-up questions and pre-retrieves their context chunks."""
+        try:
+            # Use last 5 turns for suggestion context as requested
+            context_text = self._format_context(context_docs[:2])
+            formatted_history = self._format_history(chat_history, limit=5)
+            
+            prompt = self.suggestion_prompt.format(
+                chat_history=formatted_history,
+                context=context_text,
+                last_answer=last_answer
+            )
+            
+            response = self.chat_llm.invoke(prompt)
+            raw_text = response.content if hasattr(response, 'content') else str(response)
+            
+            # Parse bullet points
+            suggestion_list = []
+            for line in raw_text.split("\n"):
+                line = line.strip().lstrip("-").lstrip("1. ").strip()
+                if line and len(line) > 5:
+                    suggestion_list.append(line)
+            
+            # Pre-retrieve chunks for each suggestion
+            results = []
+            for q in suggestion_list[:3]:
+                print(f"[*] Pre-retrieving for suggestion: {q}")
+                # We use the base retriever directly for pre-retrieval
+                pre_docs = self.base_retriever.invoke(q)
+                results.append({
+                    "question": q,
+                    "pre_docs": pre_docs
+                })
+            
+            return results
+        except Exception as e:
+            print(f"[-] Error generating suggestions: {e}")
+            return []

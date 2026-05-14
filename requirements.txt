@@ -16,3 +16,4 @@ sentence-transformers
 torch
 torchvision
 redis
+langchain-community

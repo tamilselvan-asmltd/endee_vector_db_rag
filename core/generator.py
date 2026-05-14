@@ -1,10 +1,11 @@
 import sys
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from langchain_ollama import OllamaLLM, ChatOllama
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.chains import create_history_aware_retriever
 from core.semantic_cache import RedisSemanticCache
+from core.history_manager import ChatHistoryManager
 from config.settings import settings
 
 class GenerationService:
@@ -29,6 +30,7 @@ class GenerationService:
         
         self.base_retriever = retriever
         self.semantic_cache = RedisSemanticCache()
+        self.history_manager = ChatHistoryManager()
         
         # 1. Setup History-Aware Retriever
         contextualize_q_system_prompt = (
@@ -52,26 +54,48 @@ class GenerationService:
         )
 
         self.prompt_template = PromptTemplate.from_template("""
-Use the following context to answer the user's question. 
+You are a helpful engineering assistant. Use the following chat history and context to answer the user's question.
 If you don't know the answer based on the context, just say you don't know. 
 Do not try to make up an answer.
 
-Context:
+### Chat History (Last 5 Turns):
+{chat_history}
+
+### Context:
 {context}
 
-Question: {question}
+### Question:
+{question}
 
-Answer:
+### Answer:
 """)
 
     def _format_context(self, docs: List[Any]) -> str:
         """Formats a list of documents into a single context string."""
         return "\n\n".join([f"--- Source: {d.metadata.get('filename', 'Unknown')} ---\n{d.page_content}" for d in docs])
 
-    def run_with_metrics(self, query: str, chat_history: List[Any] = None, tenant_id: str = "default", doc_version: str = "1.0"):
+    def _format_history(self, messages: List[Any], limit: int = 5) -> str:
+        """Formats the last N conversation turns into a string for the prompt."""
+        if not messages:
+            return "No previous history."
+        
+        # Each turn is User + AI, so last 5 turns = last 10 messages
+        recent_messages = messages[-(limit * 2):]
+        formatted_history = []
+        for msg in recent_messages:
+            role = "User" if msg.type == "human" else "AI"
+            formatted_history.append(f"{role}: {msg.content}")
+        
+        return "\n".join(formatted_history)
+
+    def run_with_metrics(self, query: str, session_id: Optional[str] = None, tenant_id: str = "default", doc_version: str = "1.0"):
         """Runs the manual RAG pipeline and returns result with performance metrics."""
         
-        # 0. Query Normalization & Embedding Generation
+        # 0. Fetch Chat History from Redis if session_id provided
+        chat_history = []
+        if session_id:
+            print(f"[*] Fetching chat history for session: {session_id}")
+            chat_history = self.history_manager.get_history(session_id)
         normalized_query = self.semantic_cache.normalize_query(query)
         q_dense = self.base_retriever.embedding_service.get_dense_embedding(normalized_query)
 
@@ -117,7 +141,9 @@ Answer:
         context_text = self._format_context(docs)
         
         # 3. Prompt Preparation
+        formatted_history = self._format_history(chat_history, limit=settings.history_window_size)
         final_prompt = self.prompt_template.format(
+            chat_history=formatted_history,
             context=context_text,
             question=query
         )
@@ -162,6 +188,12 @@ Answer:
             tenant_id=tenant_id,
             doc_version=doc_version
         )
+
+        # 7. Save to Chat History
+        if session_id:
+            self.history_manager.add_user_message(session_id, query)
+            self.history_manager.add_ai_message(session_id, full_response)
+            print(f"[*] Saved interaction to chat history for session: {session_id}")
 
         metrics = {
             "total_time": total_duration + retrieval_time,

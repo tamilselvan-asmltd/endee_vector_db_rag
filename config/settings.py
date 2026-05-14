@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     semantic_cache_threshold: float = 0.85
     semantic_cache_ttl: int = 3600  # 1 hour
     semantic_cache_index_name: str = "semantic_cache_idx"
+    semantic_cache_prefix: str = "sem_cache:"
+
+    # Redis Chat History
+    redis_chat_history_prefix: str = "chat:"
+    max_history_messages: int = 10
+
+    # Redis Embedding Cache
+    embed_cache_prefix: str = "embed_cache:"
+    embed_cache_ttl: int = 86400 * 7  # 7 days
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent / ".env"),

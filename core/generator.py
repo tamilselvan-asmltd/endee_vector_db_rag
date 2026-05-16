@@ -1,5 +1,6 @@
 import sys
 import time
+import concurrent.futures
 from typing import List, Dict, Any, Optional
 from langchain_ollama import OllamaLLM, ChatOllama
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
@@ -247,16 +248,24 @@ No other text.
                 if line and len(line) > 5:
                     suggestion_list.append(line)
             
-            # Pre-retrieve chunks for each suggestion
+            # Pre-retrieve chunks for each suggestion in parallel
             results = []
-            for q in suggestion_list[:3]:
-                print(f"[*] Pre-retrieving for suggestion: {q}")
-                # We use the base retriever directly for pre-retrieval
-                pre_docs = self.base_retriever.invoke(q)
-                results.append({
-                    "question": q,
-                    "pre_docs": pre_docs
-                })
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                # Map pre-retrieval tasks
+                future_to_query = {executor.submit(self.base_retriever.invoke, q): q for q in suggestion_list[:3]}
+                
+                for future in concurrent.futures.as_completed(future_to_query):
+                    q = future_to_query[future]
+                    try:
+                        pre_docs = future.result()
+                        results.append({
+                            "question": q,
+                            "pre_docs": pre_docs
+                        })
+                        print(f"[+] Pre-retrieved {len(pre_docs)} chunks for suggestion: {q}")
+                    except Exception as e:
+                        print(f"[!] Error pre-retrieving for '{q}': {e}")
+                        results.append({"question": q, "pre_docs": []})
             
             return results
         except Exception as e:

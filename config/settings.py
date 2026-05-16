@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     semantic_cache_index_name: str = "semantic_cache_idx"
     semantic_cache_prefix: str = "sem_cache:"
 
+    # Redis Retriever Cache (Semantic Chunk Caching)
+    retriever_cache_enabled: bool = True
+    retriever_cache_threshold: float = 0.80
+    retriever_cache_ttl: int = 3600 # 1 hour
+    retriever_cache_index_name: str = "retriever_cache_idx"
+    retriever_cache_prefix: str = "ret_cache:"
+
     # Redis Chat History
     redis_chat_history_prefix: str = "chat:"
     max_history_messages: int = 10

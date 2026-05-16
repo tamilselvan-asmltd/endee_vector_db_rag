@@ -10,6 +10,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
 from config.settings import settings
+from core.retriever_cache import RetrieverSemanticCache
 
 # Global cache for the reranker model to prevent reloading across re-initializations
 _RERANKER_INSTANCE = None
@@ -25,7 +26,9 @@ class HybridEndeeRetriever(BaseRetriever):
     last_retrieval_time: float = Field(default=0.0)
     last_hybrid_time: float = Field(default=0.0)
     last_rerank_time: float = Field(default=0.0)
+    last_cache_hit: bool = Field(default=False)
     reranker: Any = Field(default=None, exclude=True)
+    cache: Any = Field(default=None, exclude=True)
 
     def __init__(self, **data: Any):
         super().__init__(**data)
@@ -59,15 +62,31 @@ class HybridEndeeRetriever(BaseRetriever):
                         print(f"[!] Error initializing reranker: {e}")
             
             self.reranker = _RERANKER_INSTANCE
+        
+        # Initialize Retriever Cache
+        self.cache = RetrieverSemanticCache()
 
     def _get_relevant_documents(self, query: str) -> List[Document]:
         start_time = time.perf_counter()
         
         # 1) Generate embeddings
         q_dense = self.embedding_service.get_dense_embedding(query)
+        
+        # 2) Check Retriever Cache (Semantic Match)
+        cached_docs = self.cache.search(q_dense)
+        if cached_docs:
+            self.last_cache_hit = True
+            self.last_retrieval_time = time.perf_counter() - start_time
+            self.last_hybrid_time = 0.0
+            self.last_rerank_time = 0.0
+            print(f"[+] Skipping DB query and reranking. Cache HIT.")
+            return cached_docs
+        
+        self.last_cache_hit = False
+
         q_sparse = self.embedding_service.get_sparse_embedding(query, is_query=True)
 
-        # 2) Perform hybrid query
+        # 3) Perform hybrid query
         # Fetch more candidates if reranking is enabled
         fetch_k = settings.rerank_top_k if settings.use_reranker else self.top_k
         
@@ -106,6 +125,7 @@ class HybridEndeeRetriever(BaseRetriever):
         
         # 4) Rerank if enabled and model is loaded
         rerank_start = time.perf_counter()
+        
         if settings.use_reranker and self.reranker and docs:
             print(f"[*] Reranking {len(docs)} documents using {settings.reranker_model_name}...")
             pairs = [[query, d.page_content] for d in docs]
@@ -124,4 +144,8 @@ class HybridEndeeRetriever(BaseRetriever):
         self.last_rerank_time = time.perf_counter() - rerank_start
         self.last_retrieval_time = time.perf_counter() - start_time
         self.last_hybrid_time = self.last_retrieval_time - self.last_rerank_time
+
+        # Store in cache after retrieval/reranking
+        self.cache.store(query, q_dense, docs)
+        
         return docs

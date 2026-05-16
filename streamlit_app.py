@@ -630,6 +630,20 @@ if page == "🤖 AI Chat":
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+            
+            # Display Metrics for Assistant Messages
+            if message["role"] == "assistant" and message.get("metrics"):
+                m = message["metrics"]
+                cache_status = "✅ HIT" if m.get("cache_hit") else "❌ MISS"
+                sem_cache_status = "✅ HIT" if m.get("sem_cache_hit") else "❌ MISS"
+                
+                st.caption(
+                    f"🚀 {m.get('tps', 0):.1f} tokens/s | Latency: {m.get('duration', 0):.2f}s | "
+                    f"Retriever Cache: {cache_status} | Answer Cache: {sem_cache_status}\n\n"
+                    f"⏱️ Retrieval: {m.get('retrieval_time', 0):.3f}s "
+                    f"(Hybrid: {m.get('hybrid_time', 0):.3f}s, Rerank: {m.get('rerank_time', 0):.3f}s)"
+                )
+
             if message.get("sources"):
                 with st.expander("📌 Source References"):
                     for source in message["sources"]:
@@ -705,7 +719,16 @@ if page == "🤖 AI Chat":
                         st.session_state.messages.append({
                             "role": "assistant",
                             "content": full_response,
-                            "sources": []
+                            "sources": [],
+                            "metrics": {
+                                "tps": 0.0,
+                                "duration": cached_hit["search_time"],
+                                "retrieval_time": 0.0,
+                                "hybrid_time": 0.0,
+                                "rerank_time": 0.0,
+                                "cache_hit": False,
+                                "sem_cache_hit": True
+                            }
                         })
                         
                         # Generate Follow-up Suggestions (Cached Hit)
@@ -831,7 +854,16 @@ if page == "🤖 AI Chat":
                         st.session_state.messages.append({
                             "role": "assistant",
                             "content": full_response,
-                            "sources": unique_sources
+                            "sources": unique_sources,
+                            "metrics": {
+                                "tps": tps,
+                                "duration": duration,
+                                "retrieval_time": retrieval_time,
+                                "hybrid_time": hybrid_time,
+                                "rerank_time": rerank_time,
+                                "cache_hit": getattr(generator.base_retriever, "last_cache_hit", False),
+                                "sem_cache_hit": False # This block is only reached on semantic cache MISS
+                            }
                         })
 
                         # 8. Wait for follow-up suggestions (Generated in parallel)

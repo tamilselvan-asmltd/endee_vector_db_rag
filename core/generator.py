@@ -80,9 +80,6 @@ The questions should help the user dive deeper into the technical details found 
 ### Conversation History:
 {chat_history}
 
-### AI's Last Response:
-{last_answer}
-
 Provide exactly 3 questions that are answerable using the available technical documentation.
 Format:
 - Question 1
@@ -228,7 +225,7 @@ No other text.
         
         return {"result": full_response, "source_documents": docs, "cache_hit": False}, metrics
 
-    def generate_suggestions(self, chat_history: List[Any], context_docs: List[Any], last_answer: str) -> List[Dict[str, Any]]:
+    def generate_suggestions(self, chat_history: List[Any], context_docs: List[Any]) -> List[Dict[str, Any]]:
         """Generates 3 follow-up questions and pre-retrieves their context chunks."""
         try:
             # Use last 5 turns for suggestion context as requested
@@ -237,8 +234,7 @@ No other text.
             
             prompt = self.suggestion_prompt.format(
                 chat_history=formatted_history,
-                context=context_text,
-                last_answer=last_answer
+                context=context_text
             )
             
             response = self.chat_llm.invoke(prompt)

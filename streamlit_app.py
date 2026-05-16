@@ -710,10 +710,10 @@ if page == "🤖 AI Chat":
                         
                         # Generate Follow-up Suggestions (Cached Hit)
                         with st.spinner("Preparing suggestions..."):
+                            temp_history = chat_history + [HumanMessage(content=prompt)]
                             st.session_state.suggestions = generator.generate_suggestions(
-                                chat_history=chat_history,
-                                context_docs=[], # No new docs for cache hit
-                                last_answer=full_response
+                                chat_history=temp_history,
+                                context_docs=[] # No new docs for cache hit
                             )
                         st.rerun()
                     else:
@@ -748,7 +748,17 @@ if page == "🤖 AI Chat":
                             st.warning("⚠️ No direct documents matched your query. Answering based on general knowledge.")
                             context_text = "No direct document matches found."
 
-                        # 2. Generation Phase
+                        # 2. Start Suggestion Generation in Parallel
+                        import concurrent.futures
+                        temp_history = chat_history + [HumanMessage(content=prompt)]
+                        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                        future_suggestions = executor.submit(
+                            generator.generate_suggestions,
+                            temp_history,
+                            context_docs
+                        )
+
+                        # 3. Generation Phase
                         formatted_history = generator._format_history(chat_history, limit=settings.history_window_size)
                         final_prompt = generator.prompt_template.format(
                             chat_history=formatted_history,
@@ -824,13 +834,10 @@ if page == "🤖 AI Chat":
                             "sources": unique_sources
                         })
 
-                        # 8. Generate Follow-up Suggestions (Standard Path)
-                        with st.spinner("Preparing follow-up questions..."):
-                            st.session_state.suggestions = generator.generate_suggestions(
-                                chat_history=chat_history,
-                                context_docs=context_docs,
-                                last_answer=full_response
-                            )
+                        # 8. Wait for follow-up suggestions (Generated in parallel)
+                        with st.spinner("Finalizing follow-up questions..."):
+                            st.session_state.suggestions = future_suggestions.result()
+                        executor.shutdown(wait=False)
                         st.rerun()
 
                         st.rerun()

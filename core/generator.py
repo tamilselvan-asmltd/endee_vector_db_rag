@@ -56,7 +56,7 @@ class GenerationService:
 
         self.prompt_template = PromptTemplate.from_template("""
 You are a helpful engineering assistant. Use the following chat history and context to answer the user's question.
-If you don't know the answer based on the context, just say you don't know. 
+If sufficient verified context exists, answer clearly; otherwise respond: 'I could not find verified information in the available knowledge base for this request,' and never invent details.
 Do not try to make up an answer.
 
 ### Chat History (Last 5 Turns):

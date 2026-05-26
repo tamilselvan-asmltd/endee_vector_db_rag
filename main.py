@@ -95,7 +95,18 @@ def ingest(pdf_path: str, recreate: bool = False, extra_metadata: Optional[Dict[
     # Batch upsert (64 at a time as per notebook pattern)
     batch_size = 64
     for i in range(0, len(all_points), batch_size):
-        db.upsert_batch(index, all_points[i : i + batch_size])
+        try:
+            db.upsert_batch(index, all_points[i : i + batch_size])
+        except Exception as e:
+            print(f"[!] Batch upsert failed at offset {i}: {e}")
+            # If the error suggests the index doesn't exist, try recreating
+            if "not found" in str(e).lower() or "doesn't exist" in str(e).lower():
+                print("[*] Retrying with index recreation...")
+                db.ensure_index()
+                index = db.get_index()
+                db.upsert_batch(index, all_points[i : i + batch_size])
+            else:
+                raise
     
     print("[+] Ingestion complete.")
 
@@ -106,6 +117,7 @@ def ask(query: str):
     print("[*] Initializing RAG services...")
     embeddings = EmbeddingService()
     db = DatabaseService()
+    db.ensure_index()
     index = db.get_index()
     
     retriever = HybridEndeeRetriever(

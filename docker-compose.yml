@@ -20,6 +20,23 @@ services:
     volumes:
       - redis_data:/data
 
+  postgres-agent:
+    image: postgres:16-alpine
+    container_name: postgres-agent-memory
+    environment:
+      POSTGRES_DB: agent_memory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    volumes:
+      - postgres_agent_data:/var/lib/postgresql/data
+    profiles:
+      - agent
+      - full
+
 volumes:
   endee_data:
   redis_data:
+  postgres_agent_data:

@@ -3,8 +3,12 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from langchain_core.messages import HumanMessage, AIMessage
+
+# Agent imports
+from agent.graph.graph import agent_graph
+from agent.streamlit.chat_interface import render_component, display_agent_metrics
 
 # Ensure we can import from core/config
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -197,12 +201,19 @@ if "system_initialized" not in st.session_state:
 if "active_search_filter" not in st.session_state:
     st.session_state.active_search_filter = []
 
+# Agent mode session state
+if "agent_mode" not in st.session_state:
+    st.session_state.agent_mode = False
+if "agent_initialized" not in st.session_state:
+    st.session_state.agent_initialized = False
+
 # --- Core RAG Logic ---
 def initialize_services():
     """Initializes RAG services and caches them in session state."""
     try:
         embeddings = EmbeddingService()
         db = DatabaseService()
+        db.ensure_index()
         index = db.get_index()
         
         # Use active search filter from session state
@@ -217,6 +228,30 @@ def initialize_services():
         st.session_state.system_initialized = True
     except Exception as e:
         st.error(f"Failed to initialize AI Engine: {e}")
+
+def initialize_agent_services():
+    """Initializes LangGraph agent dependencies."""
+    try:
+        from agent.tools.rag_tool import set_retriever
+        from agent.tools.sql_tool import set_llm
+        from langchain_ollama import ChatOllama
+
+        if st.session_state.system_initialized:
+            generator = st.session_state.generator
+            retriever = generator.base_retriever
+            set_retriever(retriever)
+
+            llm = ChatOllama(
+                base_url=settings.ollama_url,
+                model=settings.ollama_llm_model,
+                temperature=0,
+                keep_alive="5m",
+            )
+            set_llm(llm)
+
+        st.session_state.agent_initialized = True
+    except Exception as e:
+        st.error(f"Failed to initialize agent: {e}")
 
 def sync_history_from_redis():
     """Syncs the Streamlit session messages with the Redis chat history."""
@@ -286,6 +321,23 @@ with st.sidebar:
             st.session_state.active_search_filter = []
             st.info("Filters cleared.")
             initialize_services()
+
+    # Agent Mode Toggle
+    st.subheader("🤖 AI Mode")
+    agent_mode = st.toggle(
+        "LangGraph Agent Mode",
+        value=st.session_state.agent_mode,
+        help="Enable the LangGraph agent for RAG + SQL querying + chart generation",
+        key="agent_mode_toggle",
+    )
+    if agent_mode != st.session_state.agent_mode:
+        st.session_state.agent_mode = agent_mode
+        if agent_mode and not st.session_state.agent_initialized:
+            initialize_agent_services()
+        st.rerun()
+
+    if st.session_state.agent_mode:
+        st.caption("Agent can answer from docs, query health DB, and generate charts")
 
     st.subheader("🚀 Session & Cache Settings")
     
@@ -630,6 +682,11 @@ if page == "🤖 AI Chat":
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+
+            # Render stored chart components (agent mode)
+            if message.get("ui_components"):
+                for component in message["ui_components"]:
+                    render_component(component)
             
             # Display Metrics for Assistant Messages
             if message["role"] == "assistant" and message.get("metrics"):
@@ -687,6 +744,64 @@ if page == "🤖 AI Chat":
                 generator = st.session_state.generator
                 
                 try:
+                    # === AGENT MODE BRANCH ===
+                    if st.session_state.get("agent_mode", False) and st.session_state.get("agent_initialized", False):
+                        start_time = time.perf_counter()
+
+                        chat_history = generator.history_manager.get_history(st.session_state.session_id)
+
+                        config = {
+                            "configurable": {
+                                "thread_id": st.session_state.session_id,
+                                "session_id": st.session_state.session_id,
+                            }
+                        }
+
+                        initial_state = {
+                            "user_query": prompt,
+                            "session_id": st.session_state.session_id,
+                            "messages": chat_history[-10:] if chat_history else [],
+                            "retrieved_docs": None,
+                            "sql_results": None,
+                            "chart_payloads": None,
+                            "tool_trace": None,
+                            "error": None,
+                        }
+
+                        with st.spinner("🤖 Agent thinking..."):
+                            result = agent_graph.invoke(initial_state, config=config)
+
+                        elapsed = time.perf_counter() - start_time
+                        full_response = result.get("final_response", "")
+                        ui_components = result.get("ui_components", [])
+
+                        if full_response:
+                            message_placeholder.markdown(full_response)
+
+                        for component in (ui_components or []):
+                            render_component(component)
+
+                        display_agent_metrics(result, elapsed)
+
+                        generator.history_manager.add_user_message(st.session_state.session_id, prompt)
+                        generator.history_manager.add_ai_message(st.session_state.session_id, full_response)
+
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": full_response,
+                            "sources": [],
+                            "ui_components": ui_components,
+                            "metrics": {
+                                "tps": 0,
+                                "duration": elapsed,
+                                "agent_mode": True,
+                                "tool_trace": result.get("tool_trace", []),
+                                "chart_count": len(ui_components or []),
+                            }
+                        })
+                        st.rerun()
+
+                    # === STANDARD RAG MODE BRANCH ===
                     # 0. Fetch Chat History from Redis
                     with st.spinner("Fetching chat history..."):
                         chat_history = generator.history_manager.get_history(st.session_state.session_id)

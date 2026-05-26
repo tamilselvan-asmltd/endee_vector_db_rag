@@ -17,3 +17,7 @@ torch
 torchvision
 redis
 langchain-community
+psycopg2-binary
+langgraph
+langgraph-checkpoint-sqlite
+sqlalchemy

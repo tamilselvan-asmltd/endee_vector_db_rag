@@ -1,0 +1,167 @@
+2026-05-25 19:53:50 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:54:08 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:54:25 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:54:25 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 19:54:34 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:54:34 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 19:54:53 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:54:53 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 19:55:27 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:55:27 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 19:56:50 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:56:50 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 19:59:33 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 19:59:33 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:01:48 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 20:01:48 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:03:00 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 20:03:00 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:06:16 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 20:06:16 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:10:29 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 20:10:29 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:11:20 | INFO     | agent | Intent classified: sql for query: show johns report
+2026-05-25 20:11:20 | INFO     | agent | Executing SQL tool for: show johns report
+2026-05-25 20:11:23 | INFO     | agent | SQL generated: SELECT dbm.* 
+FROM daily_body_metrics dbm 
+JOIN users u ON dbm.user_id = u.id 
+WHERE u.display_name = 'john' 
+ORDER BY dbm.measurement_date DESC LIMIT 100;
+2026-05-25 20:12:32 | INFO     | agent | Intent classified: sql for query: Jane Doe  details i want
+2026-05-25 20:12:32 | INFO     | agent | Executing SQL tool for: Jane Doe  details i want
+2026-05-25 20:12:36 | INFO     | agent | SQL generated: SELECT dbm.*, u.id AS user_id, u.email, u.display_name, u.created_at AS user_created_at, u.updated_at AS user_updated_at FROM users u JOIN daily_body_metrics dbm ON dbm.user_id = u.id WHERE u.display_name = 'Jane Doe' LIMIT 100;
+2026-05-25 20:15:29 | INFO     | agent | Intent classified: sql for query: "Show my blood sugar trend for the last 4 days"
+2026-05-25 20:15:29 | INFO     | agent | Executing SQL tool for: "Show my blood sugar trend for the last 4 days"
+2026-05-25 20:15:34 | INFO     | agent | SQL generated: SELECT measurement_date, blood_sugar_fasting, blood_sugar_post_meal
+FROM daily_body_metrics
+WHERE measurement_date >= date('now', '-4 days')
+ORDER BY measurement_date LIMIT 100;
+2026-05-25 20:17:57 | INFO     | agent | Intent classified: sql for query: i watn line chart for  Fasting average (mg/dL)
+2026-05-25 20:17:57 | INFO     | agent | Executing SQL tool for: i watn line chart for  Fasting average (mg/dL)
+2026-05-25 20:18:00 | INFO     | agent | SQL generated: SELECT measurement_date, AVG(blood_sugar_fasting) AS avg_fasting_mgdl
+FROM daily_body_metrics
+WHERE blood_sugar_fasting IS NOT NULL
+GROUP BY measurement_date
+ORDER BY measurement_date LIMIT 100;
+2026-05-25 20:18:08 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 20:18:08 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:19:00 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 20:19:00 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:20:50 | INFO     | agent | Intent classified: sql for query: Average sugar for Jane this month
+2026-05-25 20:20:50 | INFO     | agent | Executing SQL tool for: Average sugar for Jane this month
+2026-05-25 20:20:55 | INFO     | agent | SQL generated: SELECT AVG(dbm.blood_sugar_fasting) AS avg_fasting_sugar
+FROM daily_body_metrics dbm
+JOIN users u ON dbm.user_id = u.id
+WHERE u.display_name = 'Jane'
+  AND strftime('%Y-%m', dbm.measurement_date) = strftime('%Y-%m', 'now')
+GROUP BY u.id LIMIT 100;
+2026-05-25 20:21:16 | INFO     | agent | Intent classified: sql for query: Show weight trend for all users 
+2026-05-25 20:21:16 | INFO     | agent | Executing SQL tool for: Show weight trend for all users 
+2026-05-25 20:21:19 | INFO     | agent | SQL generated: SELECT u.display_name, d.measurement_date, d.body_weight_kg
+FROM daily_body_metrics d
+JOIN users u ON d.user_id = u.id
+ORDER BY u.display_name, d.measurement_date LIMIT 100;
+2026-05-25 20:22:01 | INFO     | agent | Intent classified: sql for query: Heart rate trend for Carol?
+2026-05-25 20:22:01 | INFO     | agent | Executing SQL tool for: Heart rate trend for Carol?
+2026-05-25 20:22:04 | INFO     | agent | SQL generated: SELECT dbm.measurement_date, dbm.heart_rate_bpm
+FROM daily_body_metrics dbm
+JOIN users u ON dbm.user_id = u.id
+WHERE u.display_name = 'Carol'
+ORDER BY dbm.measurement_date LIMIT 100;
+2026-05-25 20:23:12 | INFO     | agent | Intent classified: sql for query: How many steps did Jane average this week?
+2026-05-25 20:23:12 | INFO     | agent | Executing SQL tool for: How many steps did Jane average this week?
+2026-05-25 20:23:16 | INFO     | agent | SQL generated: SELECT AVG(steps_count) AS average_steps
+FROM daily_body_metrics
+WHERE user_id = (SELECT id FROM users WHERE display_name = 'Jane')
+  AND measurement_date >= date('now', '-7 days')
+GROUP BY user_id LIMIT 100;
+2026-05-25 20:23:34 | INFO     | agent | Intent classified: sql for query: “Has Jane gained weight recently?
+2026-05-25 20:23:34 | INFO     | agent | Executing SQL tool for: “Has Jane gained weight recently?
+2026-05-25 20:23:37 | INFO     | agent | SQL generated: SELECT u.display_name,
+       MIN(m.body_weight_kg) AS min_weight,
+       MAX(m.body_weight_kg) AS max_weight,
+       (MAX(m.body_weight_kg) - MIN(m.body_weight_kg)) AS weight_change
+FROM users u
+JOIN daily_body_metrics m ON u.id = m.user_id
+WHERE u.display_name = 'Jane'
+  AND m.measurement_date >= date('now','-30 days')
+GROUP BY u.display_name LIMIT 100;
+2026-05-25 20:23:51 | INFO     | agent | Intent classified: sql for query: Compare Jane and Bob’s sugar levels
+2026-05-25 20:23:51 | INFO     | agent | Executing SQL tool for: Compare Jane and Bob’s sugar levels
+2026-05-25 20:23:56 | INFO     | agent | SQL generated: SELECT u.display_name,
+       AVG(dbm.blood_sugar_fasting) AS avg_fasting,
+       AVG(dbm.blood_sugar_post_meal) AS avg_post_meal
+FROM daily_body_metrics dbm
+JOIN users u ON dbm.user_id = u.id
+WHERE u.display_name IN ('Jane', 'Bob')
+  AND dbm.measurement_date >= date('now', '-30 days')
+GROUP BY u.display_name LIMIT 100;
+2026-05-25 20:29:44 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-25 20:29:44 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-25 20:30:08 | INFO     | agent | Intent classified: sql for query: How many steps did Jane average this week?
+2026-05-25 20:30:08 | INFO     | agent | Executing SQL tool for: How many steps did Jane average this week?
+2026-05-25 20:30:13 | INFO     | agent | SQL generated: SELECT AVG(steps_count) AS average_steps
+FROM daily_body_metrics dbm
+JOIN users u ON dbm.user_id = u.id
+WHERE u.display_name = 'Jane'
+  AND dbm.measurement_date >= date('now', '-7 days')
+GROUP BY u.id LIMIT 100;
+2026-05-25 20:31:00 | INFO     | agent | Intent classified: sql for query: line chart for SpO2 
+2026-05-25 20:31:00 | INFO     | agent | Executing SQL tool for: line chart for SpO2 
+2026-05-25 20:31:03 | INFO     | agent | SQL generated: SELECT measurement_date, oxygen_saturation_percent
+FROM daily_body_metrics
+ORDER BY measurement_date LIMIT 100;
+2026-05-25 20:32:15 | INFO     | agent | Intent classified: sql for query: Jane Doe          vs 
+Bob Smith  barchart i want 
+2026-05-25 20:32:15 | INFO     | agent | Executing SQL tool for: Jane Doe          vs 
+Bob Smith  barchart i want 
+2026-05-25 20:32:23 | INFO     | agent | SQL generated: SELECT u.display_name, AVG(dbm.steps_count) AS avg_steps
+FROM daily_body_metrics AS dbm
+JOIN users AS u ON dbm.user_id = u.id
+WHERE u.display_name IN ('Jane Doe', 'Bob Smith')
+GROUP BY u.display_name LIMIT 100;
+2026-05-25 20:33:01 | INFO     | agent | Intent classified: sql for query: “Show Jane Doe sugar trend over time” in chart
+2026-05-25 20:33:01 | INFO     | agent | Executing SQL tool for: “Show Jane Doe sugar trend over time” in chart
+2026-05-25 20:33:11 | INFO     | agent | SQL generated: SELECT m.measurement_date, m.blood_sugar_fasting, m.blood_sugar_post_meal
+FROM daily_body_metrics AS m
+JOIN users AS u ON m.user_id = u.id
+WHERE u.display_name = 'Jane Doe'
+ORDER BY m.measurement_date LIMIT 100;
+2026-05-25 20:33:22 | INFO     | agent | Intent classified: sql for query: “Compare today’s sugar levels across all users” barchart i wnat
+2026-05-25 20:33:22 | INFO     | agent | Executing SQL tool for: “Compare today’s sugar levels across all users” barchart i wnat
+2026-05-25 20:33:26 | INFO     | agent | SQL generated: SELECT u.display_name, d.blood_sugar_fasting, d.blood_sugar_post_meal
+FROM daily_body_metrics d
+JOIN users u ON d.user_id = u.id
+WHERE d.measurement_date = date('now') LIMIT 100;
+2026-05-25 20:33:41 | INFO     | agent | Intent classified: sql for query: “Show step contribution by each user”
+2026-05-25 20:33:41 | INFO     | agent | Executing SQL tool for: “Show step contribution by each user”
+2026-05-25 20:33:45 | INFO     | agent | SQL generated: SELECT u.id AS user_id, u.display_name, SUM(d.steps_count) AS total_steps
+FROM daily_body_metrics d
+JOIN users u ON d.user_id = u.id
+GROUP BY u.id, u.display_name
+ORDER BY total_steps DESC LIMIT 100;
+2026-05-26 11:01:22 | INFO     | agent | SQLite checkpointer initialized at /Users/tamilselavans/Downloads/endee_vdb/endee_vector_db_rag/agent_memory.db
+2026-05-26 11:01:22 | INFO     | agent | LangGraph agent compiled successfully
+2026-05-26 11:05:38 | INFO     | agent | Intent classified: sql for query: Carol Williams  details i want ?
+2026-05-26 11:05:38 | INFO     | agent | Executing SQL tool for: Carol Williams  details i want ?
+2026-05-26 11:05:40 | INFO     | agent | SQL generated: SELECT dbm.* 
+FROM daily_body_metrics dbm 
+JOIN users u ON dbm.user_id = u.id 
+WHERE u.display_name = 'Carol Williams' 
+ORDER BY dbm.measurement_date DESC LIMIT 100;
+2026-05-26 11:06:22 | INFO     | agent | Intent classified: sql for query: Bob Smith   vs Dave Brown   HR barchat i want 
+2026-05-26 11:06:22 | INFO     | agent | Executing SQL tool for: Bob Smith   vs Dave Brown   HR barchat i want 
+2026-05-26 11:06:25 | INFO     | agent | SQL generated: SELECT u.display_name,
+       AVG(m.heart_rate_bpm) AS avg_heart_rate
+FROM daily_body_metrics m
+JOIN users u ON m.user_id = u.id
+WHERE u.display_name IN ('Bob Smith', 'Dave Brown')
+GROUP BY u.id, u.display_name LIMIT 100;
+2026-05-26 11:07:05 | INFO     | agent | Intent classified: sql for query: top 5 SpO2 people list i want with chart
+2026-05-26 11:07:05 | INFO     | agent | Executing SQL tool for: top 5 SpO2 people list i want with chart
+2026-05-26 11:07:09 | INFO     | agent | SQL generated: SELECT u.id, u.display_name, u.email, MAX(d.oxygen_saturation_percent) AS max_spo2
+FROM daily_body_metrics d
+JOIN users u ON d.user_id = u.id
+GROUP BY u.id, u.display_name, u.email
+ORDER BY max_spo2 DESC
+LIMIT 5;

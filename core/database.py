@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 from endee import Endee
 from config.settings import settings
 
+
 class DatabaseService:
     """Handles interaction with the Endee Vector Database."""
 
@@ -20,13 +21,11 @@ class DatabaseService:
             except Exception:
                 pass
         else:
-            # Check if it already exists
             try:
                 self.client.get_index(self.index_name)
                 print(f"[*] Index '{self.index_name}' already exists. Skipping creation.")
                 return
             except Exception:
-                # If get_index fails, we assume it needs to be created
                 print(f"[*] Index '{self.index_name}' not found. Creating...")
 
         try:
@@ -41,7 +40,34 @@ class DatabaseService:
             )
             print(f"[+] Index '{self.index_name}' created successfully.")
         except Exception as e:
-            print(f"[!] Error during index creation: {e}")
+            err_msg = str(e).lower()
+            if "already exists" in err_msg or "conflict" in err_msg:
+                print(f"[*] Index '{self.index_name}' already exists (race). Verifying...")
+                self._verify_or_force_recreate()
+            else:
+                print(f"[!] Error during index creation: {e}")
+
+    def _verify_or_force_recreate(self):
+        """Check if the index is actually usable. If not, delete and recreate."""
+        try:
+            self.client.get_index(self.index_name)
+            print(f"[*] Index '{self.index_name}' verified successfully.")
+        except Exception:
+            print(f"[!] Index '{self.index_name}' exists in name but is unusable. Force recreating...")
+            try:
+                self.client.delete_index(self.index_name)
+            except Exception:
+                pass
+            self.client.create_index(
+                name=self.index_name,
+                dimension=self.dimension,
+                space_type=self.space_type,
+                M=settings.endee_m,
+                ef_con=settings.endee_ef_con,
+                precision=settings.endee_precision,
+                sparse_model="endee_bm25",
+            )
+            print(f"[+] Index '{self.index_name}' recreated successfully.")
 
     def get_index(self):
         """Returns the index object."""
@@ -53,7 +79,9 @@ class DatabaseService:
             return
         index.upsert(points)
 
-    def query(self, index, vector: List[float], sparse_indices: List[int], sparse_values: List[float], top_k: int = 5, filt: Optional[List[dict]] = None):
+    def query(self, index, vector: List[float], sparse_indices: List[int],
+              sparse_values: List[float], top_k: int = 5,
+              filt: Optional[List[dict]] = None):
         """Performs a hybrid query on the index."""
         kwargs = {
             "vector": vector,
@@ -63,7 +91,6 @@ class DatabaseService:
         }
         if filt:
             kwargs["filter"] = filt
-        
         return index.query(**kwargs)
 
     def delete_by_filter(self, index, filt: List[dict]):
@@ -71,7 +98,6 @@ class DatabaseService:
         if not filt:
             print("[!] No filter provided for deletion. Skipping.")
             return
-        
         print(f"[*] Deleting chunks with filter: {filt}")
         try:
             index.delete_with_filter(filter=filt)

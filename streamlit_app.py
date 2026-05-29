@@ -47,10 +47,12 @@ except ImportError:
     pass
 # ------------------------------------------------------------------------
 
+import base64
 from core.embeddings import EmbeddingService
 from core.database import DatabaseService
 from core.retriever import HybridEndeeRetriever
 from core.generator import GenerationService
+from core.pdf_utils import annotate_pdf_page, extract_single_page_as_pdf, get_pagewise_filepath
 from main import ingest
 
 # --- Page Configuration ---
@@ -196,6 +198,18 @@ if "system_initialized" not in st.session_state:
 
 if "active_search_filter" not in st.session_state:
     st.session_state.active_search_filter = []
+
+# PDF Annotation state
+if "last_query" not in st.session_state:
+    st.session_state.last_query = ""
+if "annotated_pdfs" not in st.session_state:
+    st.session_state.annotated_pdfs = {}
+if "show_annotated" not in st.session_state:
+    st.session_state.show_annotated = {}
+if "annotating" not in st.session_state:
+    st.session_state.annotating = {}
+if "pdf_viewer_source" not in st.session_state:
+    st.session_state.pdf_viewer_source = None  # { "key", "bytes", "filename", "annotated" }
 
 # --- Core RAG Logic ---
 def initialize_services():
@@ -645,10 +659,122 @@ if page == "🤖 AI Chat":
                 )
 
             if message.get("sources"):
+                src_key = f"msg_{id(message)}"
                 with st.expander("📌 Source References"):
-                    for source in message["sources"]:
-                        st.markdown(f"**[{source['filename']}]({source['link']})** • Page {source['page']}")
+                    for idx, source in enumerate(message["sources"]):
+                        key = f"{src_key}_{idx}"
+                        filename = source["filename"]
+                        page = source["page"]
+                        link = source.get("link", "")
+                        filepath = source.get("filepath", "")
+
+                        col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+                        with col1:
+                            st.markdown(f"**{filename}** · Page {page}")
+                        with col2:
+                            if st.button("👁️ View", key=f"view_{key}", use_container_width=True):
+                                try:
+                                    fp = get_pagewise_filepath(filename, page)
+                                    if os.path.exists(fp):
+                                        pdf_bytes = Path(fp).read_bytes()
+                                    elif filepath and os.path.exists(filepath):
+                                        pdf_bytes = extract_single_page_as_pdf(filepath, page)
+                                    else:
+                                        st.error("PDF file not found on disk")
+                                        pdf_bytes = None
+                                    if pdf_bytes:
+                                        st.session_state.pdf_viewer_source = {
+                                            "key": key,
+                                            "filename": filename,
+                                            "page": page,
+                                            "original_bytes": pdf_bytes,
+                                            "annotated_bytes": None,
+                                            "show_annotated": False,
+                                        }
+                                except Exception as e:
+                                    st.error(f"Error loading PDF: {e}")
+                        with col3:
+                            annotating = st.session_state.annotating.get(key, False)
+                            has_annotation = key in st.session_state.annotated_pdfs
+                            if has_annotation:
+                                label = "✅ Done"
+                            elif annotating:
+                                label = "⏳..."
+                            else:
+                                label = "✏️ Annotate"
+                            if st.button(label, key=f"annot_{key}",
+                                         disabled=annotating,
+                                         use_container_width=True):
+                                if has_annotation:
+                                    st.session_state.show_annotated[key] = not st.session_state.show_annotated.get(key, False)
+                                    if st.session_state.pdf_viewer_source and st.session_state.pdf_viewer_source["key"] == key:
+                                        st.session_state.pdf_viewer_source["show_annotated"] = st.session_state.show_annotated[key]
+                                else:
+                                    st.session_state.annotating[key] = True
+                                    try:
+                                        fp = get_pagewise_filepath(filename, page)
+                                        if os.path.exists(fp):
+                                            page_bytes = Path(fp).read_bytes()
+                                        elif filepath and os.path.exists(filepath):
+                                            page_bytes = extract_single_page_as_pdf(filepath, page)
+                                        else:
+                                            raise FileNotFoundError(f"Cannot find PDF for {filename} page {page}")
+                                        query = st.session_state.last_query or filename
+                                        annotated = annotate_pdf_page(page_bytes, query, page)
+                                        st.session_state.annotated_pdfs[key] = annotated
+                                        st.session_state.show_annotated[key] = True
+                                        st.session_state.pdf_viewer_source = {
+                                            "key": key,
+                                            "filename": filename,
+                                            "page": page,
+                                            "original_bytes": page_bytes,
+                                            "annotated_bytes": annotated,
+                                            "show_annotated": True,
+                                        }
+                                    except Exception as e:
+                                        st.error(f"Annotation failed: {e}")
+                                    finally:
+                                        st.session_state.annotating[key] = False
+                                    st.rerun()
+                        with col4:
+                            show_ann = st.session_state.show_annotated.get(key, False)
+                            if key in st.session_state.annotated_pdfs:
+                                label = "🔄 Orig" if show_ann else "🔄 Ann"
+                                if st.button(label, key=f"tog_{key}", use_container_width=True):
+                                    st.session_state.show_annotated[key] = not show_ann
+                                    if st.session_state.pdf_viewer_source and st.session_state.pdf_viewer_source["key"] == key:
+                                        st.session_state.pdf_viewer_source["show_annotated"] = st.session_state.show_annotated[key]
+                                    st.rerun()
     
+    # PDF Viewer Panel
+    viewer = st.session_state.get("pdf_viewer_source")
+    if viewer and viewer.get("original_bytes"):
+        filename = viewer.get("filename", "document")
+        page = viewer.get("page", "")
+        show_ann = viewer.get("show_annotated", False)
+        ann_bytes = viewer.get("annotated_bytes")
+
+        display_bytes = ann_bytes if (show_ann and ann_bytes) else viewer["original_bytes"]
+        b64 = base64.b64encode(display_bytes).decode()
+        src = f"data:application/pdf;base64,{b64}"
+
+        label = f"📄 {filename}" + (f" · Page {page}" if page else "")
+        if show_ann and ann_bytes:
+            label += " [Annotated]"
+
+        with st.container():
+            st.markdown(f"**{label}**")
+            st.markdown(
+                f'<embed src="{src}" type="application/pdf" width="100%" height="650px" '
+                f'style="border:1px solid #ccc; border-radius:6px;">',
+                unsafe_allow_html=True,
+            )
+            if st.button("✕ Close Preview"):
+                st.session_state.pdf_viewer_source = None
+                st.rerun()
+
+        st.divider()
+
     # Display Suggestions
     if st.session_state.suggestions:
         cols = st.columns(len(st.session_state.suggestions))
@@ -673,6 +799,9 @@ if page == "🤖 AI Chat":
         suggested_docs = None
 
     if prompt:
+        # Track the last user query for annotation context
+        st.session_state.last_query = prompt
+
         # User Perspective
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -827,6 +956,7 @@ if page == "🤖 AI Chat":
                             if link and link not in seen_links:
                                 unique_sources.append({
                                     "filename": Path(d.metadata.get("filename", "Unknown")).name,
+                                    "filepath": d.metadata.get("filename", ""),
                                     "link": link,
                                     "page": d.metadata.get("page", "?")
                                 })

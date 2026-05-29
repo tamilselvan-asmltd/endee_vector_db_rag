@@ -17,3 +17,5 @@ torch
 torchvision
 redis
 langchain-community
+annotateai
+litellm

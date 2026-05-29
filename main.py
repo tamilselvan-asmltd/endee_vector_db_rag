@@ -97,6 +97,12 @@ def ingest(pdf_path: str, recreate: bool = False, extra_metadata: Optional[Dict[
     for i in range(0, len(all_points), batch_size):
         db.upsert_batch(index, all_points[i : i + batch_size])
     
+    # 5. Split PDF into page-wise files for the file server
+    if settings.split_pdf_on_ingest:
+        from core.pdf_utils import split_pdf_to_pages
+        split_files = split_pdf_to_pages(pdf_path, settings.cleaned_dir)
+        print(f"[+] Split into {len(split_files)} page-wise PDFs in '{settings.cleaned_dir}/'")
+
     print("[+] Ingestion complete.")
 
 def ask(query: str):

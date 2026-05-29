@@ -1,5 +1,6 @@
 import os
 import time
+import urllib.parse
 
 # Silence noisy transformers logs
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
@@ -11,6 +12,7 @@ from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
 from config.settings import settings
 from core.retriever_cache import RetrieverSemanticCache
+from core.pdf_utils import get_pagewise_url
 
 # Global cache for the reranker model to prevent reloading across re-initializations
 _RERANKER_INSTANCE = None
@@ -106,15 +108,14 @@ class HybridEndeeRetriever(BaseRetriever):
             meta = h.get("meta", {})
             text = meta.pop("text", "")
             
-            # Inject document link if filename exists
+            # Inject document link (page-wise) if filename exists
             filename = meta.get("filename")
             if filename:
                 import os
-                import urllib.parse
                 basename = os.path.basename(filename)
-                # URL-encode filename to handle spaces in Markdown links
-                encoded_name = urllib.parse.quote(basename)
-                meta["link"] = f"{settings.doc_server_url}/{encoded_name}"
+                page = meta.get("page", 1)
+                meta["link"] = get_pagewise_url(basename, page)
+                meta["full_link"] = f"{settings.doc_server_url}/{urllib.parse.quote(basename)}"
                 
             docs.append(
                 Document(

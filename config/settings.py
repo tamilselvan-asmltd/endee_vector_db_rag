@@ -56,8 +56,19 @@ class Settings(BaseSettings):
     max_history_messages: int = 10
 
     # Redis Embedding Cache
+    redis_chat_history_prefix: str = "chat:"
+    max_history_messages: int = 10
+
+    # Redis Embedding Cache
     embed_cache_prefix: str = "embed_cache:"
     embed_cache_ttl: int = 86400 * 7  # 7 days
+
+    # PDF Annotation
+    annotation_enabled: bool = True
+    annotation_model: str = ""
+    cleaned_dir: str = "data/cleaned"
+    cleaned_server_url: str = "http://localhost:8003"
+    split_pdf_on_ingest: bool = True
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent / ".env"),
